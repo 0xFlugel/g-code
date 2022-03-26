@@ -194,6 +194,32 @@ impl<'input> Spanned for Line<'input> {
 }
 
 impl<'input> Line<'input> {
+    /// After all fields and inline comments, return the line-comment and the whitespace directly in
+    /// front of it.
+    pub fn trailing_noninline_whitespace_and_comment(&self) -> Option<&'input str> {
+        let whitespace = self
+            .line_components
+            .last()
+            .iter()
+            .filter_map(|c| c.whitespace.as_ref())
+            .next();
+        match (whitespace, self.comment.as_ref()) {
+            (Some(w), None) => Some(w.inner),
+            (None, Some(c)) => Some(c.inner),
+            (Some(w), Some(c)) => unsafe {
+                assert_eq!(
+                    w.span().1,
+                    c.span().0,
+                    "Whitespace and comment must be touching."
+                );
+                let spliced =
+                    std::slice::from_raw_parts(w.inner.as_ptr(), w.inner.len() + c.inner.len());
+                Some(std::str::from_utf8(spliced).expect("Slices were validated already."))
+            },
+            _ => None,
+        }
+    }
+
     /// Iterate by [Field] in a line of g-code.
     pub fn iter_fields(&self) -> impl Iterator<Item = &Field<'input>> {
         self.line_components.iter().filter_map(|c| c.field.as_ref())
